@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Datenmengen – Karten ordnen</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      color: #222;
+    }
+    #auftrag {
+      padding: 10px 16px;
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+    #auftrag .label {
+      display: inline-block;
+      background: #2e7d32;
+      color: #fff;
+      font-size: 12px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    #auftrag button {
+      float: right;
+      font: inherit;
+      font-size: 13px;
+      padding: 3px 10px;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      background: #fafafa;
+      cursor: pointer;
+    }
+    #tisch {
+      position: relative;
+      width: 100%;
+    }
+    .card {
+      position: absolute;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      padding: 6px;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .card.aktiv {
+      cursor: grabbing;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+    .card img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 5px;
+      pointer-events: none;
+      -webkit-user-drag: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="auftrag">
+  <button id="mischen" type="button">Neu mischen</button>
+  <span class="label">Aufgabe · Gruppe · 15'</span>
+  Ordnen Sie die Karten nach ihrer Datenmenge: von der kleinsten bis zur grössten.
+  Schätzen Sie zu jeder Karte, wie viel Speicherplatz sie braucht (Bit, Byte, KB, MB, GB, TB …),
+  und begründen Sie Ihre Reihenfolge.
+</div>
+<div id="tisch"></div>
+
+<script>
+  const bilder = [
+    'images/1.jpg', 'images/2.jpg', 'images/3.jpg', 'images/4.jpg',
+    'images/5.jpg', 'images/6.jpg', 'images/7.jpg', 'images/8.jpg',
+    'images/9.jpg', 'images/10.jpg', 'images/11.jpg', 'images/12.jpg'
+  ];
+  const SPALTEN = 4;
+  const ABSTAND = 12;
+  const FORMAT = 0.7; // Kartenbreite : Kartenhöhe (Hochformat)
+  const tisch = document.getElementById('tisch');
+  const auftrag = document.getElementById('auftrag');
+  let karten = [];
+  let oberste = 1;
+
+  function mischen(liste) {
+    const a = liste.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  // Kartengrösse so wählen, dass alle Reihen ohne Scrollen Platz haben
+  function auslegen() {
+    const reihen = Math.ceil(karten.length / SPALTEN);
+    const hoehe = window.innerHeight - auftrag.offsetHeight;
+    const breite = window.innerWidth;
+    tisch.style.height = hoehe + 'px';
+    const maxB = (breite - ABSTAND * (SPALTEN + 1)) / SPALTEN;
+    const maxH = (hoehe - ABSTAND * (reihen + 1)) / reihen;
+    const b = Math.max(30, Math.floor(Math.min(maxB, maxH * FORMAT)));
+    const h = Math.floor(b / FORMAT);
+    const rand = (breite - SPALTEN * b - (SPALTEN - 1) * ABSTAND) / 2;
+    karten.forEach((karte, i) => {
+      karte.style.width = b + 'px';
+      karte.style.height = h + 'px';
+      karte.style.left = rand + (i % SPALTEN) * (b + ABSTAND) + 'px';
+      karte.style.top = ABSTAND + Math.floor(i / SPALTEN) * (h + ABSTAND) + 'px';
+    });
+  }
+
+  function neuAuslegen() {
+    tisch.innerHTML = '';
+    karten = mischen(bilder).map(pfad => {
+      const karte = document.createElement('div');
+      karte.className = 'card';
+      const img = document.createElement('img');
+      img.src = pfad;
+      img.alt = '';
+      img.draggable = false;
+      karte.appendChild(img);
+      karte.addEventListener('pointerdown', ziehenStart);
+      tisch.appendChild(karte);
+      return karte;
+    });
+    auslegen();
+  }
+
+  // Ziehen mit Maus, Finger oder Stift (Pointer Events)
+  function ziehenStart(e) {
+    const karte = e.currentTarget;
+    e.preventDefault();
+    karte.setPointerCapture(e.pointerId);
+    karte.classList.add('aktiv');
+    karte.style.zIndex = ++oberste;
+    const dx = e.clientX - karte.offsetLeft;
+    const dy = e.clientY - karte.offsetTop;
+
+    function bewegen(ev) {
+      const maxX = tisch.clientWidth - karte.offsetWidth;
+      const maxY = tisch.clientHeight - karte.offsetHeight;
+      karte.style.left = Math.min(Math.max(0, ev.clientX - dx), maxX) + 'px';
+      karte.style.top = Math.min(Math.max(0, ev.clientY - dy), maxY) + 'px';
+    }
+    function ende() {
+      karte.classList.remove('aktiv');
+      karte.removeEventListener('pointermove', bewegen);
+      karte.removeEventListener('pointerup', ende);
+      karte.removeEventListener('pointercancel', ende);
+    }
+    karte.addEventListener('pointermove', bewegen);
+    karte.addEventListener('pointerup', ende);
+    karte.addEventListener('pointercancel', ende);
+  }
+
+  // Bei Grössenänderung (z. B. Handy drehen, Adressleiste) Anordnung behalten und nur skalieren
+  function skalieren() {
+    const alteB = tisch.clientWidth, alteH = tisch.clientHeight;
+    const pos = karten.map(k => [k.offsetLeft / alteB, k.offsetTop / alteH]);
+    auslegen();
+    const neueB = tisch.clientWidth, neueH = tisch.clientHeight;
+    karten.forEach((k, i) => {
+      k.style.left = Math.min(pos[i][0] * neueB, neueB - k.offsetWidth) + 'px';
+      k.style.top = Math.min(pos[i][1] * neueH, neueH - k.offsetHeight) + 'px';
+    });
+  }
+
+  document.getElementById('mischen').addEventListener('click', neuAuslegen);
+  window.addEventListener('resize', skalieren);
+  neuAuslegen();
+</script>
+
+</body>
+</html>
